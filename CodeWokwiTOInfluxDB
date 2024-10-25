@@ -1,0 +1,64 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <DHT.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+const char* influxdb_url = "https://us-east-1-1.aws.cloud2.influxdata.com/api/v2/write?org=36c2271511ddd069&bucket=final1&precision=s";
+const char* influxdb_token = "nnXnjVxIPnwOKDHV7OADnov8mbspv2zPuf4xzGR54TyQM-iQjK7MbQf6fw80lxLuKDnm8MAPyUFaEO1Rzn6qUQ==";
+
+#define DHTPIN 15 
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000); // UTC time, updates every 60 seconds
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+  timeClient.begin();
+}
+void loop() {
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  timeClient.update();
+  long current_time = timeClient.getEpochTime();
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" °C, Humidity: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String postData = String("sensor_data temperature=") + String(temperature) + ",humidity=" + String(humidity) + " " + String(current_time);
+    http.begin(influxdb_url); 
+    http.addHeader("Authorization", String("Token ") + influxdb_token);
+    http.addHeader("Content-Type", "text/plain");
+    int httpResponseCode = http.POST(postData);
+
+   
+     if (httpResponseCode > 0) {
+      Serial.print("HTTP Response code: ");
+      Serial.println(httpResponseCode);
+    } else {
+      Serial.print("Error code: ");
+      Serial.println(httpResponseCode);
+    }
+    http.end();
+  }
+  delay(500);
+}
+ delay(500);
+}
